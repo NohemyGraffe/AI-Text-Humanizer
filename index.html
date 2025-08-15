@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Humanizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin: 24px; max-width: 900px; }
+    h1 { margin-bottom: 6px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+    textarea { width: 100%; min-height: 180px; padding: 12px; border-radius: 10px; border: 1px solid #cbd5e1; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button { padding: 10px 16px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; }
+    .primary { background: black; color: white; }
+    .ghost { background: #f3f4f6; }
+    .muted { color: #6b7280; font-size: 14px; }
+    pre { white-space: pre-wrap; word-wrap: break-word; background: #0a0a0a; color: #f8fafc; padding: 14px; border-radius: 12px; }
+    .issues { margin-top: 8px; color: #b45309; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #fff7ed; border: 1px solid #fed7aa; margin: 2px 6px 2px 0; font-size: 12px; }
+    .footer { margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <h1>🧑‍💻 Humanizer</h1>
+  <div class="muted">Paste AI-ish text → get a concise, human-sounding version.</div>
+
+  <div class="card" style="margin-top:16px;">
+    <label for="language">Language hint:</label>
+    <select id="language">
+      <option value="auto" selected>Auto</option>
+      <option value="English">English</option>
+      <option value="Spanish">Spanish</option>
+    </select>
+
+    <textarea id="input" placeholder="Paste your text here..."></textarea>
+
+    <div class="row" style="margin-top:10px;">
+      <button id="humanizeBtn" class="primary">Humanize</button>
+      <button id="clearBtn" class="ghost">Clear</button>
+      <span id="status" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="row" style="justify-content:space-between;">
+      <h3 style="margin:0;">Result</h3>
+      <button id="copyBtn" class="ghost">Copy</button>
+    </div>
+    <pre id="output">(Your humanized text will appear here)</pre>
+    <div id="issues" class="issues"></div>
+    <div class="footer muted">Tip: Keep it to one paragraph unless clarity needs a break.</div>
+  </div>
+
+  <script>
+    const btn = document.getElementById('humanizeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const input = document.getElementById('input');
+    const output = document.getElementById('output');
+    const issuesEl = document.getElementById('issues');
+    const status = document.getElementById('status');
+    const language = document.getElementById('language');
+
+    async function humanize() {
+      const text = input.value.trim();
+      if (!text) {
+        alert('Please paste some text first.');
+        return;
+      }
+      output.textContent = '';
+      issuesEl.innerHTML = '';
+      status.textContent = 'Processing...';
+
+      try {
+        const res = await fetch('http://localhost:8000/api/humanize', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ text, language_hint: language.value })
+        });
+        if (!res.ok) {
+          status.textContent = 'Error from server.';
+          return;
+        }
+        const data = await res.json();
+        output.textContent = data.rewritten || '(No result returned)';
+        if (data.remaining_issues?.length) {
+          issuesEl.innerHTML = '<div class="muted">Remaining style flags:</div>' +
+            data.remaining_issues.map(x => `<span class="badge">${x}</span>`).join('');
+        } else {
+          issuesEl.innerHTML = '<span class="badge" style="background:#ecfdf5;border-color:#a7f3d0;color:#065f46;">Clean</span>';
+        }
+        status.textContent = 'Done.';
+      } catch (e) {
+        console.error(e);
+        status.textContent = 'Network error. Is the API running?';
+      }
+    }
+
+    btn.addEventListener('click', humanize);
+    clearBtn.addEventListener('click', () => { input.value = ''; output.textContent=''; issuesEl.innerHTML=''; status.textContent=''; });
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(output.textContent);
+        status.textContent = 'Copied to clipboard.';
+        setTimeout(()=> status.textContent='', 1500);
+      } catch { status.textContent = 'Copy failed.'; }
+    });
+
+    // CMD/CTRL+Enter to humanize
+    input.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') humanize();
+    });
+  </script>
+</body>
+</html>
